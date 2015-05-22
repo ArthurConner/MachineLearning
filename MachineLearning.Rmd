@@ -1,0 +1,118 @@
+---
+title: "Machine Learning Course Project"
+author: "Arthur Conner"
+date: "May 21, 2015"
+output: html_document
+---
+
+### Overview:
+In this project we are going to analyze the sensor data to what activtiy level seems to be done.
+
+
+### the model
+
+```{r}
+library(ggplot2)
+library(caret)
+
+#load the data
+trainFull <-read.csv("pml-training.csv",sep=",",header=TRUE)
+
+allCol = c("roll_belt", "pitch_belt", "yaw_belt", "total_accel_belt", "gyros_belt_x", "gyros_belt_y", "gyros_belt_z", "accel_belt_x", "accel_belt_y", "accel_belt_z", "magnet_belt_x", "magnet_belt_y", "magnet_belt_z", "roll_arm", "pitch_arm", "yaw_arm", "total_accel_arm", "gyros_arm_x", "gyros_arm_y", "gyros_arm_z", "accel_arm_x", "accel_arm_y", "accel_arm_z", "magnet_arm_x", "magnet_arm_y", "magnet_arm_z", "roll_dumbbell", "pitch_dumbbell", "yaw_dumbbell", "total_accel_dumbbell", "gyros_dumbbell_x", "gyros_dumbbell_y", "gyros_dumbbell_z", "accel_dumbbell_x", "accel_dumbbell_y", "accel_dumbbell_z", "magnet_dumbbell_x", "magnet_dumbbell_y", "magnet_dumbbell_z", "roll_forearm", "pitch_forearm", "yaw_forearm", "total_accel_forearm", "gyros_forearm_x", "gyros_forearm_y", "gyros_forearm_z", "accel_forearm_x", "accel_forearm_y", "accel_forearm_z", "magnet_forearm_x", "magnet_forearm_y", "magnet_forearm_z","classe")
+
+#partition the data so we can validate it later
+trainPartial = trainFull[,allCol]
+inTrain <- createDataPartition(y=trainPartial$classe,
+p=0.7, list=FALSE)
+training <- trainPartial[inTrain,]
+testing <- trainPartial[-inTrain,]
+
+write.table(training,file="partialTrain.csv",sep=",",col.names=TRUE)
+write.table(training,file="partialTest.csv",sep=",",col.names=TRUE)
+```
+### Models
+
+random forrests tend to be the best thing if you haven't worked the dataset over. During one of the video lectures it was mentioned that these and boost are used to win kaggle competions
+
+### Using caret
+
+I think my issue was using category columns. This *should* work with random forrests, but the results that came back were bad - there were all kinds of esocteric error messages. I did look inside the testing file to see which columns weren't NA and used only those columns to create the model.
+
+### a Decision model
+
+I first wanted to test using a single decision tree since this would be relatively quick to calculate.
+
+From this we can ge the feature importance.
+
+```{r fig.height=4.5, fig.width=4.5}
+library(ggplot2)
+library(caret)
+
+descFit <- train(classe ~ .,method="rpart",data=training)
+
+varImp(descFit)
+
+pred <- predict(descFit,testing); testing$predRight <- pred==testing$classe
+table(pred,testing$classe)
+
+```
+
+We can graph the two most important features to naively see how well we are doing.
+
+```{r fig.height=4.5, fig.width=4.5}
+qplot(data=training,x=roll_belt,y=magnet_dumbbell_z,color=classe,main="Type of activitiy base on factors")
+
+```
+
+
+```{r fig.height=4,fig.width=4,cache=TRUE}
+
+modelFileName = "randomforest5.rda"
+
+if(file.exists(modelFileName)) {
+    ## load model
+    load(modelFileName)
+} else {
+    ## (re)fit the model
+  #this took a long time to run using the defaults
+  
+  #   user   system  elapsed 
+#6305.859   21.287 6345.707 
+  
+  #with number 2
+  #  user  system elapsed 
+#334.274   2.688 339.576
+  fitControl <- trainControl(method = "boot", 
+             number = 3,
+             repeats = 1,
+             p = 0.75, 
+             verboseIter = TRUE
+)
+  
+ system.time(modelFit <- train(classe ~.,data=training,method="rf",trControl = fitControl,verbose = TRUE))
+ save(modelFit,file =modelFileName)
+
+}
+varImp(modelFit)
+
+```
+
+### Comparing Errors
+
+We can now look at a single decistion tree versus the random forest to get a sense of how they did
+
+```{r}
+
+prediction <- predict(modelFit, testing)
+missClass = function(values, prediction) {
+    sum(prediction != values)/length(values)
+}
+errRate = missClass(testing$classe, prediction)
+errRate
+
+prediction <- predict(descFit, testing)
+errRate = missClass(testing$classe, prediction)
+errRate
+```
+
+The error rate of the random forrest is signifantly better than the one for the single decision tree.
