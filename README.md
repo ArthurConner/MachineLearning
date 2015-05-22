@@ -1,2 +1,2 @@
 # MachineLearning
-This is a sample repo
+The main file is machine learning.rmd you can see the output at matchinelearning.html
